@@ -1,0 +1,165 @@
+# curl's own ignore conventions, and what this package preserves of them.
+#
+# The first fact, because it decides the shape of everything below: there is no
+# upstream ignore file here to preserve or to remove. Listing the pristine
+# extracted `curl-8.22.0` tree in the driver's import scratch -- 4406 files,
+# searched at every depth -- finds no `.gitignore`, no `.gitattributes` and no
+# `.ignore`, and the same search over the vendored subset finds none either.
+# curl's *repository* does carry an ignore file; a repository file is not part
+# of a release tarball, so it was not read here and nothing in it is reproduced
+# or dropped. Every entry below is this fork's own.
+#
+# What upstream's conventions *do* survive into this tree is its build-system
+# file names, and those are preserved without exception. curl ships three build
+# systems and this fork executes none of them, but all of their files are
+# vendored, unmodified, with digests in UPSTREAM.sha256:
+#
+#   lib/Makefile.am        lib/Makefile.in         lib/Makefile.inc
+#   lib/Makefile.soname    include/Makefile.am     include/Makefile.in
+#   include/curl/Makefile.am
+#   lib/CMakeLists.txt     lib/curl_config.h.in    lib/curl_config-cmake.h.in
+#   lib/libcurl.vers.in    lib/libcurl.def         lib/libcurl.rc
+#   lib/optiontable.pl
+#
+# That list is also the reason for the patterns this file does *not* contain.
+# Each of these is a common enough entry in a C project's ignore file, and each
+# would silently swallow vendored upstream material that this package ships:
+#
+#   `*.in`        lib/Makefile.in, include/Makefile.in, include/curl/Makefile.in,
+#                 lib/curl_config.h.in, lib/curl_config-cmake.h.in,
+#                 lib/libcurl.vers.in
+#   `*.def`       lib/libcurl.def, the Windows export list
+#   `*.rc`        lib/libcurl.rc, the Windows version resource
+#   `*.pl`        lib/optiontable.pl, the generator for the option tables
+#   `Makefile*`   all five upstream Makefiles above, and lib/CMakeLists.txt is
+#                 not a Makefile but is close enough that a careless pattern
+#                 would take it too
+#   `config.h`    nothing vendored is named that -- but see below, where the one
+#                 genuinely generated header gets its own entry
+#
+# None of them is here. Nothing below re-includes a vendored file either,
+# because a `!` line for a file no pattern excludes is a no-op that reads like
+# a safeguard and is not one; the safeguard here is the absence of the broad
+# patterns, and the audit surface that would catch a mistake is
+# `sha256sum -c UPSTREAM.sha256` over 418 records.
+#
+# A `.gitignore` keeps untracked noise out of a commit. It is not what keeps
+# anything out of a *package*: that is the `.paths` allow list in
+# `build.zig.zon`, which is why nothing generated, fetched or tool-managed is
+# named there either. `.github/workflows/verify.yml` is deliberately outside
+# `.paths`, matching the sibling SDKs in this workspace -- a verification
+# workflow is not a dependency a dependent receives, and it is not an artefact
+# of the library.
+#
+# SPDX-License-Identifier: curl
+
+# ---------------------------------------------------------------- upstream
+#
+# The output names curl's own autotools and libtool build would create in this
+# tree. This package never runs `configure` -- the configure-generated input is
+# produced instead by a host-target C generator from the target's facts -- so
+# these entries are defensive: their purpose is that a stray in-tree autotools
+# run cannot litter a tree that is built with Zig, and cannot commit a
+# `Makefile` that shadows the real build graph.
+Makefile
+Makefile.in.in
+aclocal.m4
+autom4te.cache/
+config.cache
+config.guess
+config.h
+config.log
+config.status
+config.sub
+libtool
+stamp-h1
+.deps/
+.libs/
+*.la
+*.lo
+
+# `lib/curl_config.h` is generated twice upstream -- by `configure` from
+# `lib/curl_config.h.in` and by CMake from `lib/curl_config-cmake.h.in` -- and
+# named with its own entry because the pattern `config.h` above does not match
+# it. In this package it is generated for the *target being built* into the Zig
+# cache, never into the source tree, so this entry is defensive in the same way.
+lib/curl_config.h
+
+# The output names curl's CMake build would create. `lib/CMakeLists.txt` is
+# vendored upstream material and none of these patterns matches it.
+CMakeCache.txt
+CMakeFiles/
+CMakeUserPresets.json
+cmake_install.cmake
+Makefile.cmake
+
+# Compiler and archiver output. curl's own Windows build also produces import
+# libraries and debug symbols; `*.lib`, `*.exp`, `*.pdb` and `*.dll` cover
+# those names. None of them matches a vendored file: the closest is
+# `lib/libcurl.rc`, which is upstream's version resource and is not listed.
+*.o
+*.obj
+*.a
+*.so
+*.so.*
+*.dll
+*.lib
+*.exp
+*.pdb
+*.exe
+*.d
+*.gcno
+*.gcda
+*.swp
+
+# ------------------------------------------------------------------- zig
+#
+# `zig build` artefacts (fork addition). These are directories rather than
+# single files because a normal `zig build` creates them, and a normal
+# `zig build` must not dirty the tree or leak into the package published from
+# it. None of them is named in build.zig.zon `.paths`, so an ignored directory
+# can never become part of the package.
+.zig-cache/
+zig-out/
+
+# Zig 0.16 fetches dependencies into a project-local directory. This package
+# declares exactly one dependency and it is a *relative path* to the sibling
+# mbed-TLS package, so nothing is fetched for it -- but a project-local fetch
+# directory must not be committable either, in case that ever changes.
+zig-pkg/
+
+# The consumer package builds inside this repository and has its own cache and
+# output tree. It is ignored here as well as in consumer/.gitignore so a build
+# run from the repository root cannot commit it by accident.
+consumer/.zig-cache/
+consumer/zig-out/
+consumer/zig-pkg/
+
+# ------------------------------------------------------------------- nix
+#
+# `nix build` writes `result` (and `result-1`, `result-2`, ... on a rebuild)
+# into the directory that asked for it, and `devenv` writes its resolved
+# inputs and its state beside the project. None of them is named in
+# build.zig.zon `.paths`, so an ignored path can never become part of the
+# package either. `devenv.lock` and `flake.lock` are deliberately *not* here:
+# they are real inputs, they belong to the driver, and ignoring them would be
+# the wrong way to keep a build out of a commit.
+result
+result-*
+.devenv/
+.devenv.flake.nix
+.devenv.flakes/
+devenv.local.nix
+.direnv/
+.envrc.local
+# ------------------------------------------------------------------- qemu
+#
+# A cross-compiled test binary run under `qemu-<arch>` writes its core dump
+# into the directory the build was launched from, which is the package root,
+# under the name `qemu_<test-binary>_<timestamp>_<pid>.core`. A target that
+# faults under emulation therefore leaves one 83 MiB file per crashed test in
+# the source tree - 52 of them, 4.2 GiB, from one 32-bit big-endian MIPS run.
+# They are build output, not source, and nothing names them in
+# `build.zig.zon` `.paths`.
+*.core
+qemu_*.core

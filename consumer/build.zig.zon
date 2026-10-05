@@ -1,0 +1,40 @@
+// SPDX-License-Identifier: curl
+// See ../FORK-LICENSE.md for what that identifier covers.
+
+.{
+    .name = .libcurl_consumer,
+    .version = "0.1.0",
+    // This package's own identity: the value the toolchain derives for the name
+    // above, and it is *not* the library's fingerprint from
+    // `../build.zig.zon`. A consumer is a different package with a different
+    // name, and changing an identity has security and trust implications, so
+    // the two are never the same number and one is never copied from the other.
+    //
+    // It is the value Zig 0.16.0 reported for `.name = .libcurl_consumer` and
+    // this exact set of manifest fields:
+    //
+    //     build.zig.zon:1:2: error: invalid fingerprint: 0x0; if this is a new
+    //     or forked package, use this value: 0xf1f025436af345ac
+    //
+    // Changing `.name`, `.version` or this manifest's dependency keys changes
+    // the number, so a stale one is a refusal by name rather than a silent
+    // identity reuse.
+    .fingerprint = 0xf1f025436af345ac,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{
+        // A relative path, not a registry or archive URL. The consumer is the
+        // proof that `dep.module("libcurl")` works from outside the package that
+        // defines it; resolving that through the network would make the proof
+        // depend on a published state of the world instead.
+        //
+        // The key is `libcurl` because that is the name the parent manifest
+        // declares (`.name = .libcurl` in `../build.zig.zon`) and therefore the
+        // name `b.dependency("libcurl", ...)` resolves.
+        .libcurl = .{ .path = ".." },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
