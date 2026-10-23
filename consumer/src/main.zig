@@ -1,40 +1,9 @@
 // SPDX-License-Identifier: curl
 // See ../FORK-LICENSE.md for what that identifier covers.
 
-//! Consumes the `libcurl` package the way an outside project would.
-//!
-//! Everything here goes through the published surface only: `dep.module` in
-//! `build.zig`, and `@import("libcurl")` here. No path reaches into the
-//! library's own tree, so if this builds and produces the answers below, the
-//! module contract is real: the typed facade, the translated headers it
-//! re-exports as `c`, and the native library behind both arrived through one
-//! dependency line.
-//!
-//! ## What it proves
-//!
-//! A real fetch, over a real socket, against an HTTP server this process starts
-//! itself on `127.0.0.1` on a port the kernel picks. No host is named, no name
-//! is resolved, nothing leaves the machine, and the output does not depend on
-//! the clock or a random seed.
-//!
-//! The answers are not values this program computed and printed for comparison.
-//! The body is checked against a SHA-256 taken before any library code ran, and
-//! the response head is checked against the shape RFC 9110 requires. Any
-//! mismatch prints both sides and exits non-zero.
-//!
-//! ## Both configurations
-//!
-//! The same source builds against a linked package and against a
-//! runtime-loaded one. `libcurl.runtime_loaded` is a comptime constant, so the
-//! difference is one branch and no duplicated program: in the runtime-loaded
-//! build the provider is named on the command line (`--provider <path>`) or in
-//! `LIBCURL_TEST_PROVIDER`, loaded once, and the same answers follow.
-//!
-//! `build.zig` removes `LIBCURL_TEST_PROVIDER` from this run step's environment,
-//! so a `zig build run -Druntime=true -- --provider <path>` demonstrably took
-//! the command-line route. The environment route is still reachable by running
-//! the installed executable directly with the variable set. The program prints
-//! which route it used, so the record says rather than assumes.
+//! External-consumer example for the published libcurl package.
+//! It transfers from a local loopback server and checks response bytes, headers, and encoding.
+//! The same source supports linked and runtime-loaded builds with an explicit provider.
 
 const std = @import("std");
 const curl = @import("libcurl");
@@ -44,12 +13,8 @@ const Sha256 = std.crypto.hash.sha2.Sha256;
 /// A runtime-loading build has no provider until one is named.
 const ConfigurationError = error{NoProviderConfigured};
 
-/// The provider this run should load, from `--provider <path>` or from
-/// `LIBCURL_TEST_PROVIDER`.
-///
-/// Both are explicit. Nothing here looks in a default location, and a build
-/// that was not told which file to load says so rather than loading something
-/// else.
+/// Read the provider path from `--provider` or `LIBCURL_TEST_PROVIDER`.
+/// Both are explicit; no default lookup or fallback is attempted.
 fn providerRequest(init: std.process.Init) ConfigurationError![]const u8 {
     const args = init.minimal.args.toSlice(init.arena.allocator()) catch
         return noProvider();
@@ -64,8 +29,7 @@ fn providerRequest(init: std.process.Init) ConfigurationError![]const u8 {
         return noProvider();
 }
 
-/// Say which variable is missing. An error name on its own would send the next
-/// person into the loader instead of to the command line.
+/// Explain how to select a provider for a runtime-loaded build.
 fn noProvider() ConfigurationError {
     std.debug.print(
         "consumer: this is a runtime-loading build. Pass --provider <path>, or " ++
@@ -77,35 +41,21 @@ fn noProvider() ConfigurationError {
     return error.NoProviderConfigured;
 }
 
-/// The loopback address the fixture binds to.
+/// IPv4 loopback address used by the fixture server.
 const loopback = "127.0.0.1";
 
-/// The recorded body this program serves and then checks.
-///
-/// Independently constructed for this package, and written out here rather than
-/// shared with `../tests.zig` and `../smoke.zig`: a file both of those would
-/// import has to appear in `../build.zig.zon`'s `.paths`, which is not this
-/// package's file to edit. The digest is what makes the duplication safe -- if
-/// the copies drifted, one of the three programs would fail rather than
-/// quietly check its own bytes.
-///
-/// Its one unusual property is a line that looks like a response header
-/// (`X-Not-A-Header: ...`). A body contaminated by the response head is then
-/// visible rather than merely plausible, so the byte-exact check below is a
-/// statement about the body and not about the whole exchange.
+/// Body includes a header-like line to detect response-head contamination.
 const fixture_body: []const u8 =
     "libcurl consumer fixture\n" ++
     "X-Not-A-Header: this is body text, not a response header\n" ++
     "last line\n";
 
-/// SHA-256 of `fixture_body`, OBSERVED from `sha256sum` over its bytes before
-/// any libcurl code in this package had been built or run.
+/// Expected SHA-256 of `fixture_body`.
 const fixture_digest_hex = "908a5869982caac4fa0dffb85a2449c22db791fdd153cded06ea90f41a93f6aa";
 
 const body_capacity = 64 * 1024;
 const head_capacity = 4096;
 
-/// What the transfer delivered, assembled by the facade's own callbacks.
 const Sink = struct {
     body: [body_capacity]u8 = undefined,
     body_len: usize = 0,
@@ -122,13 +72,7 @@ const Sink = struct {
     }
 };
 
-/// The write sink libcurl calls for response bodies.
-///
-/// Four parameters, in libcurl's own order: `curl_write_callback` is
-/// `size_t (*)(char *buffer, size_t size, size_t nitems, void *outstream)`
-/// (`include/curl/curl.h:285-288`), and `lib/url.c:326` casts libc's `fwrite` --
-/// also four, userdata last -- into that type to make the default. The byte
-/// count is `size * nitems`.
+/// libcurl body callback; the byte count is `size * nitems`.
 fn onWrite(
     buffer: [*c]u8,
     size: usize,
@@ -144,8 +88,7 @@ fn onWrite(
     return total;
 }
 
-/// The header sink libcurl calls for the response head. Same shape as `onWrite`,
-/// same source line.
+/// libcurl response-header callback, with the same argument shape as `onWrite`.
 fn onHeader(
     buffer: [*c]u8,
     size: usize,
@@ -160,14 +103,8 @@ fn onHeader(
     return total;
 }
 
-/// A tiny HTTP/1.1 server on the loopback interface, answering `requests`
-/// connections and then stopping.
-///
-/// One `std.Io.Group` member on the instance's own thread pool, which is a real
-/// OS thread underneath and is the arrangement `std/Build/WebServer.zig:147-186`
-/// uses for the same job. Cancelling the group both interrupts the blocked
-/// `accept` and waits for the thread to leave, so this program cannot hang in
-/// teardown even if a transfer never arrived.
+/// Single-process HTTP/1.1 fixture on loopback.
+/// Group cancellation interrupts `accept` and joins the serving thread at teardown.
 const FixtureServer = struct {
     io: std.Io,
     group: std.Io.Group = .init,
@@ -177,11 +114,8 @@ const FixtureServer = struct {
     answered: usize = 0,
     fault: bool = false,
 
-    /// Takes the destination rather than returning one, because the serving
-    /// thread is handed `self`. Returning by value left the thread holding a
-    /// pointer to a stack frame that ended when `start` returned, so it read
-    /// `self.listener` and `self.io` out of reclaimed stack and faulted inside
-    /// `Server.accept` (`std/Io/net.zig:1443`) on the first connection.
+    /// Initialize in place because the serving thread borrows `self`.
+    /// Returning by value would leave it with a pointer to expired stack storage.
     fn start(self: *FixtureServer, io: std.Io, requests: usize) !void {
         var address = try std.Io.net.IpAddress.parseIp4(loopback, 0);
         const listener = try address.listen(io, .{ .reuse_address = true });
@@ -189,8 +123,7 @@ const FixtureServer = struct {
             .io = io,
             .listener = listener,
             .requests = requests,
-            // `Socket.address` carries the resolved port "if requested"
-            // (`std/Io/net.zig:1054-1055`), which is what `port 0` is for.
+            // Port 0 requests an ephemeral port; read the bound port from the listener.
             .port = listener.socket.address.getPort(),
         };
         errdefer self.listener.deinit(io);
@@ -204,9 +137,8 @@ const FixtureServer = struct {
     }
 
     fn url(self: *const FixtureServer, target: []const u8, buffer: []u8) ![:0]const u8 {
-        // `[:0]` because `Easy.setUrl` measures with `strlen`
-        // (`lib/setopt.c:84`). `bufPrint` writes no terminator of its own, so
-        // the NUL is written here rather than asserted over untouched bytes.
+        // `setUrl` uses `strlen`, and `bufPrint` does not append the NUL required by `[:0]`.
+        // Write the terminator explicitly and return the sentinel-terminated slice.
         const printed = try std.fmt.bufPrint(buffer, "http://{s}:{d}{s}", .{ loopback, self.port, target });
         buffer[printed.len] = 0;
         return buffer[0..printed.len :0];
@@ -236,14 +168,8 @@ fn serve(self: *FixtureServer) std.Io.Cancelable!void {
         };
         self.answered += 1;
 
-        // `respond` emits the status line, a `Content-Length` that matches the
-        // body and the empty line that ends the head
-        // (`std/http/Server.zig:352-386`), and it flushes before it returns.
-        // Writing the head by hand through an `Io.Writer` would look equivalent
-        // and would not be: that writer buffers, and closing the socket with
-        // bytes still in its buffer drops them. So the head comes from `std`,
-        // and the checks below are statements about the protocol rather than
-        // about this program's own spelling of it.
+        // `respond` writes and flushes the complete response head before returning.
+        // Manual writes could remain buffered when the socket closes.
         request.respond(fixture_body, .{ .keep_alive = false }) catch {
             self.fault = true;
             return;
@@ -251,7 +177,7 @@ fn serve(self: *FixtureServer) std.Io.Cancelable!void {
     }
 }
 
-/// True when one CRLF-terminated line of `head` is exactly `line`.
+/// Whether `head` contains `line` as a complete CRLF-terminated line.
 fn hasLine(head: []const u8, line: []const u8) bool {
     var lines = std.mem.splitSequence(u8, head, "\r\n");
     while (lines.next()) |candidate| {
@@ -267,8 +193,7 @@ pub fn main(init: std.process.Init) !void {
     var stdout = std.Io.File.stdout().writerStreaming(io, &buffer);
     const w = &stdout.interface;
 
-    // In a runtime-loading build every call below goes through a table that this
-    // one call fills. In a linked build the branch is not analyzed at all.
+    // The linked build comptime-elides this load; runtime mode loads its named provider.
     if (comptime curl.runtime_loaded) {
         try curl.load(.{ .path = try providerRequest(init) });
     }
@@ -279,24 +204,15 @@ pub fn main(init: std.process.Init) !void {
 
     try w.print("libcurl consumer\n", .{});
     try w.print("{s} provider, reached by {s}\n", .{
-        // Through the raw escape hatch, so this line names the library this
-        // build reached rather than a constant compiled into this program. It
-        // is printed, never compared: a version string is provenance, not
-        // behaviour.
         curl.versionString(),
         route,
     });
     try w.flush();
 
     try curl.globalInit(.{});
-    // No `globalCleanup`: the handle below is still open when this function
-    // returns, and `curl_global_cleanup` decrements a refcount
-    // (`lib/easy.c:266-273`) that closing it is what balances.
+    // Keep global state initialized while the Easy handle remains open.
 
-    // One connection, because this program makes one transfer. The server stops
-    // asking after that and blocks in `accept`, which `deinit` cancels -- so a
-    // count higher than the transfers would not hang here, but it would make
-    // the count below a statement about the wrong number.
+    // Serve exactly one request so the response check matches the fixture's work.
     var fixture: FixtureServer = undefined;
     try fixture.start(io, 1);
     defer fixture.deinit();
@@ -313,20 +229,14 @@ pub fn main(init: std.process.Init) !void {
     easy.setWriteFunction(&sink, onWrite);
     easy.setHeaderFunction(&sink, onHeader);
 
-    // A header list the caller owns. Upstream copies each line at append time
-    // (`curlx_strdup`, `lib/slist.c:87`) and stores only the pointer at setopt
-    // time (`s->headers = slist`, `lib/setopt.c:1362`), so the list must
-    // outlive the transfer and is still the caller's to release afterwards.
-    // It is released explicitly below rather than in a `defer`, because defers
-    // run last-in-first-out and the release has to come after the transfer, not
-    // before the handle's own teardown.
+    // libcurl retains the list pointer, so keep the caller-owned list alive through `perform`.
+    // Free it afterward, before the handle's deferred teardown.
     var headers = curl.SList{};
     try headers.append("X-Consumer-Probe: libcurl");
     try easy.setHeaders(&headers);
 
     try easy.perform();
 
-    // The independent known answer.
     var digest: [32]u8 = undefined;
     Sha256.hash(sink.bytes(), &digest, .{});
     var hex: [64]u8 = undefined;
@@ -338,8 +248,7 @@ pub fn main(init: std.process.Init) !void {
     );
     try checkBytes(w, "body, byte for byte", sink.bytes(), fixture_body);
 
-    // What the protocol fixes, cross-checked between the status line and the
-    // declared length the fixture wrote.
+    // Check the status line and content length sent by the fixture.
     try checkInt(w, "CURLINFO_RESPONSE_CODE", try easy.responseCode(), 200);
     try checkBool(w, "status line as RFC 9110 requires", hasLine(sink.headBytes(), "HTTP/1.1 200 OK"));
     try checkBool(
@@ -351,26 +260,19 @@ pub fn main(init: std.process.Init) !void {
     try checkBool(w, "the body was not the head", sink.bytes()[0] == fixture_body[0]);
     try checkBool(w, "the fixture served its one request", !fixture.fault and fixture.answered == 1);
 
-    // `CURLINFO_EFFECTIVE_URL` is a borrow into the handle's own storage
-    // (`lib/getinfo.c:83-87`), and upstream says of the neighbouring string info
-    // "Callers must never free it themselves" (`lib/getinfo.c:124-130`). So it
-    // is read here, not released.
+    // Borrowed from the Easy handle; do not free this value.
     const effective = (try easy.effectiveUrl()) orelse return error.NoEffectiveUrl;
     try checkString(w, "CURLINFO_EFFECTIVE_URL", effective, url);
 
     headers.freeAll();
     try checkBool(w, "the caller's header list is released once", headers.raw() == null);
 
-    // Percent-encoding, against a value derived from RFC 3986 section 2.3 rather
-    // than from anything libcurl said. The character classes are the RFC's; the
-    // upper-case hex digits are libcurl's, read out of `lib/escape.c:226-227`
-    // and `lib/mprintf.c:40`.
+    // Expected escapes use RFC 3986's unreserved set; hex digits are uppercase.
     const input = "AZaz09-._~ /?#&=[]%+:@!$'(),;\"\\*|<>{}`^\x00\xff";
     var expected_buffer: [512]u8 = undefined;
     const expected = try expectedEscape(input, &expected_buffer);
 
-    // Owned by libcurl, so it is released with the matching free (`curl_free`,
-    // `lib/escape.c:190`) rather than with any Zig allocator.
+    // libcurl owns the result; release it with `curl.freeEscaped`, not a Zig allocator.
     const escaped = try curl.escape(input);
     defer curl.freeEscaped(escaped);
     try checkString(w, "escape, RFC 3986 unreserved", escaped, expected);

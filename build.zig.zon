@@ -1,156 +1,58 @@
 // SPDX-License-Identifier: curl
 // See FORK-LICENSE.md for what that identifier covers.
 .{
-    // The package id and the name a dependent writes in its dependency map, and
-    // the one registered module and the C artifact: all four are `libcurl`.
-    // `dep.module("libcurl")` is the typed Zig facade and
-    // `dep.artifact("libcurl")` is the archive or shared object, and they are
-    // the same name on purpose - `libcurl.a` is what Zig emits for an artifact
-    // called `libcurl`, and it is the name a C consumer's `-lcurl` needs.
+    // Package, module, and artifact use the same name.
     .name = .libcurl,
-    // Upstream's own release, read out of `include/curl/curlver.h:35`
-    // (`LIBCURL_VERSION "8.22.0"`) and `:39-41` (`LIBCURL_VERSION_MAJOR 8`,
-    // `_MINOR 22`, `_PATCH 0`). This is the version of the C library this
-    // package builds, not a version of the wrapper. `build.zig` compares it
-    // against the same constant read out of the header and refuses to configure
-    // when the two disagree, so this string, the pkg-config `Version:` field and
-    // `curl_version()` cannot describe three different releases.
-    //
-    // It is a *release* number and not an ABI number. The shared object's ABI
-    // identity is 4.8.0, derived from `lib/Makefile.soname:26-28` through
-    // `lib/CMakeLists.txt:271`; see `abi_version` in `build.zig`. The two answer
-    // different questions and stating only one of them is how a reader ends up
-    // believing `libcurl.so.8` exists.
+    // Release version from include/curl/curlver.h:35; the shared-library ABI version is separate.
     .version = "8.22.0",
-    // Fresh for this package. 64-bit lower hex, and it exists so that two
-    // packages with the same `.name` and `.version` cannot be confused by the
-    // build system's package hash.
     .fingerprint = 0x3fd74701c77f15de,
     .minimum_zig_version = "0.16.0",
-    // Exactly one entry, and it is the TLS backend. The key is hyphenated
-    // because it is a ZON struct field name and a field name cannot contain a
-    // hyphen as a bare identifier; the sibling's own `.name` in
-    // `mbed-tls/build.zig.zon` is `.mbed_tls` for the same reason, and the two
-    // do not have to agree. `build.zig` resolves it with
-    // `b.dependency("mbed-tls", .{ .target, .optimize })` and links
-    // `mbedtls`, `mbedx509`, `mbedcrypto` in that order.
-    //
-    // One entry and not two is a decision with visible consequences, not an
-    // oversight: there is no zlib, no brotli, no zstd, no nghttp2, no libpsl,
-    // no libidn2, no GSS-API and no LDAP, and `build.zig` names each of the
-    // features that loses at the macro that decides it. There is also no option
-    // that turns TLS off - `build.zig` stops at configure time rather than
-    // producing a libcurl without a backend.
+    // The required TLS backend; this package has no TLS-disabled build.
     .dependencies = .{
         .@"mbed-tls" = .{ .path = "../mbed-tls" },
     },
     .paths = .{
-        // This build script and the deterministic generator it runs. They travel
-        // because a dependent that fetches this package gets a libcurl that was
-        // configured for *its* target: `curl_config_gen.c` is compiled for the
-        // host that runs the build and handed the target's OS, architecture,
-        // pointer width, byte order and libc as argv, and it is the only
-        // generated input - `lib/curl_setup.h:140` includes `curl_config.h` by
-        // bare name and nothing else is generated.
+        // Build graph and target-derived config generator.
         "build.zig",
         "build.zig.zon",
         "build_support",
-        // `zig/root.zig` is the typed facade and `zig/translate.h` the aggregate
-        // translation header, both owned by the API role. They travel because a
-        // dependent reaches them through `dep.module("libcurl")`, and because the
-        // published module's import names - `translate` for the translated
-        // headers and `rt` for the loader core - are declared in `build.zig`
-        // rather than in either file.
+        // Zig facade and aggregate translation header.
         "zig",
-        // Upstream's libcurl, unmodified and whole: the 398 files of `lib/` and
-        // the 17 of `include/`. The directory travels rather than a hand-picked
-        // file list so that the tree a dependent receives is upstream's tree.
-        // `lib/` holds the 196 units of `CSOURCES` (`lib/Makefile.inc:439-441`)
-        // that `build.zig` compiles, all 187 headers of `HHEADERS`, the two
-        // upstream templates this build reads to stay honest
-        // (`lib/curl_config-cmake.h.in` for the entry order and
-        // `lib/curl_config.h.in` for the autoconf-only entries),
-        // `lib/CMakeLists.txt` and `lib/Makefile.soname`, which together compute
-        // the ABI version and the versioned-symbols prefix the shared object and
-        // its version script use, `lib/libcurl.vers.in` and `lib/libcurl.def`,
-        // which are the upstream export lists, and the build-system files this
-        // build does not execute. `include/` holds the twelve headers upstream
-        // installs (`include/curl/Makefile.am:24-26`) plus its own README and two
-        // Makefiles.
+        // Unmodified upstream source and public headers.
         "lib",
         "include",
-        // The runtime loader core, its generated dispatch and descriptor, and its
-        // sync shim, all owned by the Runtime role. They are a dependency of the
-        // published module under `-Druntime`, so a dependent that fetches this
-        // package must receive them: `runtime/graph.zig` is the one place
-        // `createModule` substitutes for `translate.createModule()`.
+        // Runtime-loading support used by the published module.
         "runtime",
-        // The behavioural test root and the deterministic example, both owned by
-        // the Behaviour role, and the separate consumer package: proof that the
-        // published module resolves from a package that did not write it,
-        // through a relative path rather than a fetch.
+        // Tests, example, and separate consumer package.
         "tests.zig",
         "smoke.zig",
         "consumer/build.zig",
         "consumer/build.zig.zon",
         "consumer/src/main.zig",
-        // Upstream's own licence, release note and release notes, preserved byte
-        // for byte as the records they are. `COPYING` is not decoration and not
-        // optional: it is the whole of curl's grant, `zig build` installs it
-        // under `share/licenses/libcurl/`, and AGENTS.md section 8 requires the
-        // licence text verbatim alongside a shipped binary - a private repository
-        // removes no upstream obligation. It is named here rather than reached
-        // through `lib/` because `zig fetch` hashes only the paths this list
-        // names, so a materialised copy without it would fail at install. `README`
-        // is upstream's release note for this version and `RELEASE-NOTES` is what
-        // it points a reader at; splitting them would break upstream's own
-        // reference, so both travel under their upstream names. Unlike lua, this
-        // package deliberately has no `README.upstream.md`: `README` *is* the
-        // upstream file, and a second copy of it under another name would be a
-        // third thing to keep in step.
+        // Upstream licence and release records.
         "COPYING",
         "README",
         "RELEASE-NOTES",
-        // The provenance and licence records this fork added around them, and
-        // the digest inventory. `UPSTREAM.sha256` covers every vendored file
-        // above - `lib/`, `include/` and the three root files - and
-        // `tools/check-provenance.sh` is the script that reads it.
+        // Provenance and licence records.
         "UPSTREAM.md",
         "UPSTREAM.sha256",
         "NOTICE.md",
         "FORK-LICENSE.md",
-        // The README role's files, which document what the other owners built.
+        // Package documentation.
         "README.md",
         "README.zig.md",
         "CHANGELOG.md",
         "FORK-NOTES.md",
-        // The provenance script that checks the recorded digests and the exact
-        // upstream file set.
+        // Provenance verifier.
         "tools",
-        // Standalone Nix packaging. `package.nix` is the one source-only
-        // derivation and builds the `.static` and `.dynamic` variants of this
-        // same tree; `flake.nix` exposes them; `devenv.nix`, `devenv.yaml` and
-        // `.envrc` provide the canonical development shell. The lock files belong
-        // to the driver and are absent from this list until they exist: naming a
-        // path that is not there would make `zig fetch` hash a missing entry.
+        // Nix and devenv packaging.
         "package.nix",
         "flake.nix",
         "devenv.nix",
         "devenv.yaml",
         ".envrc",
-        // The cross-test harness profile for this package. It is a file in the
-        // package because it is how this package declares what its
-        // cross-platform gate is: `cross-test` discovers it by name from the
-        // package root, it pins `CROSS_BUILD_ARGS=(-Dlinkage=static
-        // -Druntime=false)` so the published 53-cell matrix is the same static
-        // linked closure `zig build check` proves for the five buildable
-        // targets, and nothing in `build.zig` reads it.
+        // Cross-test harness profile.
         "cross-test.profile.sh",
-        // .zig-cache/, zig-out/, zig-pkg/, consumer/.zig-cache/, the Nix and
-        // devenv working-tree artefacts, `result`, `flake.lock` and
-        // `devenv.lock` are deliberately absent: build outputs, a fetched
-        // package tree, a symlink and shell state are not part of a package.
-        // There is no bare `.` and no `**` glob here either, because either would
-        // pull all of the above back in. See .gitignore.
+        // Build outputs, locks, and developer state are excluded.
     },
 }
