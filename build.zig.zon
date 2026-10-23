@@ -6,7 +6,7 @@
     // Release version from include/curl/curlver.h:35; the shared-library ABI version is separate.
     .version = "8.22.0",
     .fingerprint = 0x3fd74701c77f15de,
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
     // The required TLS backend; this package has no TLS-disabled build.
     .dependencies = .{
         .@"mbed-tls" = .{ .path = "../mbed-tls" },

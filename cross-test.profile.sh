@@ -1,4 +1,4 @@
-# cross-test settings for libcurl with Zig 0.16.
+# cross-test settings for libcurl with Zig 0.17.
 # The harness sources this settings-only profile from the package root.
 # Leave matrix and runner selection to the harness; do not narrow its 53 targets.
 # Target-derived config keeps foreign builds independent of host platform macros.

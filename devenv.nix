@@ -4,7 +4,7 @@
 
 let
   # Use the pinned compiler version required by build.zig.zon.
-  zig = pkgs.zig_0_16;
+  zig = pkgs.zig_0_17;
 
   libcurl = linkage: pkgs.callPackage ./package.nix { inherit linkage; };
 
@@ -87,8 +87,8 @@ in
 
   assertions = [
     {
-      assertion = zig.version == "0.16.0";
-      message = "The libcurl SDK requires Zig 0.16.0; nixpkgs resolved zig_0_16 to ${zig.version}";
+      assertion = zig.version == "0.17.0";
+      message = "The libcurl SDK requires Zig 0.17.0; nixpkgs resolved zig_0_17 to ${zig.version}";
     }
   ];
 

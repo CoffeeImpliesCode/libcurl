@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: curl
 // See FORK-LICENSE.md for what that identifier covers.
-//! Builds libcurl 8.22.0 with Zig 0.16 from upstream C sources.
+//! Builds libcurl 8.22.0 with Zig 0.17.0 from upstream C sources.
 //! A host generator creates target-specific `curl_config.h` for C and translate-c.
 //! mbed-TLS is mandatory; unsupported targets are refused at configure time.
 const std = @import("std");
@@ -424,7 +424,7 @@ fn generatorLibc(target: std.Build.ResolvedTarget) []const u8 {
 }
 
 /// Map each architecture to the generator's supported pointer width.
-/// The exhaustive switch rejects new tags; 16-bit widths are not representable.
+/// The exhaustive switch rejects new tags; only 32- and 64-bit widths are supported.
 fn pointerWidthBits(target: std.Build.ResolvedTarget) []const u8 {
     return switch (target.result.cpu.arch) {
         .aarch64, .aarch64_be, .alpha, .amdgcn, .bpfeb, .bpfel, .hppa64, .kvx,
@@ -435,19 +435,19 @@ fn pointerWidthBits(target: std.Build.ResolvedTarget) []const u8 {
 
         // Endianness does not change pointer width.
         .arc, .arceb, .arm, .armeb, .csky, .hexagon, .hppa, .kalimba, .lanai,
-        .loongarch32, .m68k, .microblaze, .microblazeel, .mips, .mipsel,
+        .loongarch32, .m68k, .m88k, .microblaze, .microblazeel, .mips, .mipsel,
         .or1k, .powerpc, .powerpcle, .propeller, .riscv32, .riscv32be, .sh,
         .sheb, .sparc, .spirv32, .thumb, .thumbeb, .wasm32, .x86, .xcore,
         .xtensa, .xtensaeb,
         => "32",
 
         // Refuse architectures whose pointer width the generator cannot express.
-        .avr, .msp430, .x86_16,
+        .avr, .ez80, .msp430, .spork8, .x86_16,
         => std.debug.panic("libcurl: no --pointer-width for architecture {s}. " ++
             "curl_config_gen.c derives SIZEOF_SIZE_T, SIZEOF_LONG, SIZEOF_OFF_T, " ++
             "SIZEOF_CURL_SOCKET_T and SIZEOF_TIME_T from --pointer-width, which " ++
-            "accepts 32 and 64 only, and this architecture's pointers are " ++
-            "16-bit. lib/curl_setup.h:630-632 rejects a configuration where long " ++
+            "accepts 32 and 64 only; this architecture's pointer width is not " ++
+            "representable. lib/curl_setup.h:630-632 rejects a configuration where long " ++
             "exceeds size_t, so any other width here would be a guess that fails " ++
             "as a compile error rather than as a refusal.", .{
             @tagName(target.result.cpu.arch),
@@ -551,13 +551,13 @@ fn addGeneratedConfig(
     run.addArg(mbedtls_des_crypt_ecb);
     // Header facts are a required tracked input, so generation waits for the target probe.
     run.addArg("--header-facts");
-    run.addPrefixedFileArg("", addHeaderProbe(b, target));
+    run.addFileArg2(addHeaderProbe(b, target), .{});
     // One tracked collector output supplies both function and member facts.
     const existence_facts = addFunctionProbe(b, target);
     run.addArg("--function-facts");
-    run.addPrefixedFileArg("", existence_facts);
+    run.addFileArg2(existence_facts, .{});
     run.addArg("--member-facts");
-    run.addPrefixedFileArg("", existence_facts);
+    run.addFileArg2(existence_facts, .{});
     run.addArg("--curl-version");
     run.addArg(upstream_version_string);
     // Unset CA options omit the generated rows read by curl (`lib/getinfo.c:161-169`).
@@ -578,8 +578,8 @@ fn addGeneratedConfig(
 fn addGraph(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
-    linkage: std.builtin.LinkMode,
+    optimize: std.lang.Optimize,
+    linkage: std.lang.LinkMode,
     runtime_loaded: bool,
     ca_bundle: ?[]const u8,
     ca_path: ?[]const u8,
@@ -657,7 +657,7 @@ fn addGraph(
 fn resolveTls(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
+    optimize: std.lang.Optimize,
 ) *std.Build.Dependency {
     return b.dependency(tls_dependency_name, .{
         .target = target,
@@ -674,8 +674,8 @@ fn resolveTls(
 fn add_c_library(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
-    requested: std.builtin.LinkMode,
+    optimize: std.lang.Optimize,
+    requested: std.lang.LinkMode,
     config_dir: std.Build.LazyPath,
     tls: *std.Build.Dependency,
     name: []const u8,
@@ -796,7 +796,7 @@ fn artifactName(b: *std.Build, target: std.Build.ResolvedTarget, public: bool) [
 /// Upstream's `libcurl.pc.in` is not vendored; this file describes this build's artifacts.
 fn addPkgConfig(
     b: *std.Build,
-    linkage: std.builtin.LinkMode,
+    linkage: std.lang.LinkMode,
     separate_m: bool,
 ) void {
     const files = b.addWriteFiles();
@@ -870,8 +870,8 @@ fn targetHasDynamicLinker(target: std.Build.ResolvedTarget) bool {
 /// Resolve one linkage for the library, facade, and pkg-config metadata.
 fn deliveredLinkage(
     target: std.Build.ResolvedTarget,
-    requested: std.builtin.LinkMode,
-) std.builtin.LinkMode {
+    requested: std.lang.LinkMode,
+) std.lang.LinkMode {
     if (requested == .dynamic and !targetHasDynamicLinker(target)) {
         // Use a runtime format string because the target OS tag is not comptime-known.
         std.debug.panic(
@@ -989,8 +989,8 @@ fn addTargetCheck(
     b: *std.Build,
     step: *std.Build.Step,
     query: std.Target.Query,
-    optimize: std.builtin.OptimizeMode,
-    linkage: std.builtin.LinkMode,
+    optimize: std.lang.Optimize,
+    linkage: std.lang.LinkMode,
     runtime_loaded: bool,
     ca_bundle: ?[]const u8,
     ca_path: ?[]const u8,
@@ -1034,8 +1034,8 @@ fn addTargetCheck(
 fn runConsumer(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
-    linkage: std.builtin.LinkMode,
+    optimize: std.lang.Optimize,
+    linkage: std.lang.LinkMode,
     runtime_loaded: bool,
     ca_bundle: ?[]const u8,
     ca_path: ?[]const u8,
@@ -1058,30 +1058,19 @@ fn runConsumer(
     run.addArg(b.fmt("-Druntime={s}", .{if (runtime_loaded) "true" else "false"}));
     if (ca_bundle) |value| run.addArg(b.fmt("-Dca-bundle={s}", .{value}));
     if (ca_path) |value| run.addArg(b.fmt("-Dca-path={s}", .{value}));
-    // Forward explicit cache paths to the nested build.
-    if (b.cache_root.path) |path| {
-        run.addArg("--cache-dir");
-        run.addArg(path);
-    }
-    if (b.graph.global_cache_root.path) |path| {
-        run.addArg("--global-cache-dir");
-        run.addArg(path);
-    }
-    if (b.graph.max_jobs) |jobs| {
-        run.addArg("-j");
-        run.addArg(b.fmt("{d}", .{jobs}));
-    }
     run.addArg("--summary");
     run.addArg("all");
     // Do not forward `--prefix`; the nested install must not overwrite this package's output.
-    // Forward remaining arguments to the consumer program.
-    if (b.args) |args| run.addArgs(args);
+    if (hostCanExecute(target)) {
+        run.addArg("--");
+        run.addPassthruArgs();
+    }
 
     return run;
 }
 
-/// Zig 0.16 cannot run foreign executables from a plain system command (`Step/Run.zig:2754-2778`).
-/// Run native consumers; install foreign ones and treat that as compile-only.
+/// A plain system command cannot execute foreign-target binaries.
+/// The caller installs them as compile-only checks.
 fn hostCanExecute(target: std.Build.ResolvedTarget) bool {
     return target.query.isNative();
 }
@@ -1092,8 +1081,8 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const linkage: std.builtin.LinkMode = b.option(
-        std.builtin.LinkMode,
+    const linkage: std.lang.LinkMode = b.option(
+        std.lang.LinkMode,
         "linkage",
         "Deliver the C library as a static archive (the default, and what " ++
             "cross-test.profile.sh pins for the published matrix) or as a real " ++
@@ -1118,15 +1107,14 @@ pub fn build(b: *std.Build) void {
             "respect.",
     ) orelse false;
 
-    // Zig 0.16 resolves dependency roots from build.zig.zon and has no per-call override (`lib/std/Build.zig:2055-2071`).
+    // Dependency roots come from build.zig.zon; there is no per-call root override.
     const tls_override = b.option(
         std.Build.LazyPath,
         "tls",
         "Override the mbed-TLS package location. REFUSED while the mbed-TLS " ++
-            "package declares no package-root option: Zig 0.16's " ++
-            "Build.dependency resolves a package root from build.zig.zon and " ++
-            "forwards only the dependency's own -D options to it, and mbed-tls " ++
-            "accepts none that moves its root. To relocate it, change the .path " ++
+            "declares no package-root option. The root comes from its " ++
+            "build.zig.zon entry; only its own -D options are forwarded. " ++
+            "To relocate it, change the .path " ++
             "of the mbed-tls entry in this package's build.zig.zon, or add a " ++
             "package-root option to mbed-tls/build.zig. There is no -Dno-tls and " ++
             "no way to build a libcurl without a TLS backend.",
@@ -1138,11 +1126,9 @@ pub fn build(b: *std.Build) void {
                 "mechanism: build.zig.zon carries exactly one .dependencies entry, " ++
                 ".@\"mbed-tls\" = .{{ .path = \"../mbed-tls\" }}, and build.zig " ++
                 "resolves it with b.dependency(\"mbed-tls\", .{{ .target, .optimize }}). " ++
-                "Zig 0.16.0 resolves a package's root from that entry and offers " ++
-                "no per-call override - lib/std/Build.zig:2055-2071 - so the only " ++
-                "arguments this build can pass are the dependency's own options, " ++
-                "and the mbed-tls package declares none that relocates its root " ++
-                "(it resolves every path through b.path relative to itself). " ++
+                "Zig 0.17.0 takes the dependency root from build.zig.zon; this " ++
+                "build can pass only mbed-TLS's declared options, and it declares " ++
+                "none that relocates the root. " ++
                 "Forwarding the flag would therefore reach a map that ignores it, " ++
                 "and a silently ignored TLS-backend override is worse than no " ++
                 "override at all: it would leave a caller believing the backend " ++
@@ -1214,7 +1200,7 @@ pub fn build(b: *std.Build) void {
 
     const run_example = b.addRunArtifact(example);
     run_example.has_side_effects = true;
-    if (b.args) |args| run_example.addArgs(args);
+    run_example.addPassthruArgs();
     b.step("smoke", "Run the deterministic example program").dependOn(&run_example.step);
 
     // Use a test root with test blocks; a re-export-only root discovers none.

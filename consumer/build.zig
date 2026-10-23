@@ -41,7 +41,7 @@ pub fn build(b: *std.Build) void {
     // `zig build consumer` can pass a configuration through to the dependency
     // instead of dropping it on the floor.
     const linkage = b.option(
-        std.builtin.LinkMode,
+        std.lang.LinkMode,
         "linkage",
         "Which delivery of libcurl to check. Forwarded to the dependency; it " ++
             "decides the artifact, never anything in this package.",
@@ -107,19 +107,8 @@ pub fn build(b: *std.Build) void {
     const run_exe = b.addRunArtifact(exe);
     run_exe.has_side_effects = true;
 
-    // Forwarded so `zig build run -Druntime=true -- --provider <path>` reaches
-    // `src/main.zig`, which reads exactly that and otherwise falls through to
-    // `LIBCURL_TEST_PROVIDER`.
-    //
-    // `b.args` here is already past the build runner's own `--` -- the runner
-    // stops parsing options there and keeps the rest (`lib/compiler/
-    // build_runner.zig:428-430`) -- so these words are the program's argv and
-    // `addArgs` is the right spelling. No second `--` belongs at this level; the
-    // one that is needed is the one the *parent* package adds when it shells
-    // out to `zig build` in this directory, and that `--` belongs to
-    // `libcurl/build.zig`, which is not this file. With no arguments this is
-    // inert, so a linked run is unchanged.
-    if (b.args) |args| run_exe.addArgs(args);
+    // Forward `zig build run -- --provider <path>` to `src/main.zig`.
+    run_exe.addPassthruArgs();
 
     // The provider variable is removed from the child's environment, so what
     // opened a shared object was the command line and not a value inherited

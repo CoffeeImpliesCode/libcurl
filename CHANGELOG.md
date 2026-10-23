@@ -1,5 +1,6 @@
 # Changelog
 
+- Port to Zig 0.17.0.
 - Probe launch and control-compile failures now stop configuration instead of reporting missing features.
 - Static C builds set position-independent code explicitly, fixing mips32 musl.
 - The existence probe derives `_GNU_SOURCE` from the target libc, fixing `memrchr` detection on musl.

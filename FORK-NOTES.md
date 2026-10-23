@@ -17,6 +17,7 @@ libcurl 8.22.0. Upstream files under `lib/` and `include/` are unchanged; this f
 
 ## Build graph
 
+- The nested consumer build cannot inherit outer job or cache-directory options through `std.Build`; it uses its own job default and inherited cache environment.
 - `build.zig` compiles the 196 C units in upstream's `lib/Makefile.inc` order with `-std=c99`; it does not use CMake, autotools or Make.
 - A host-built generator receives target OS, architecture, pointer width, endianness, libc and probe results. Its generated header is an input to both C compilation and translate-c; no configure step runs.
 - The only package dependency is `../mbed-tls`. The build links `mbedtls`, `mbedx509` and `mbedcrypto` in that order; `-Dtls` cannot relocate the dependency and is refused.
@@ -27,6 +28,7 @@ libcurl 8.22.0. Upstream files under `lib/` and `include/` are unchanged; this f
 ## Platform and feature boundaries
 
 - Baseline targets: `x86_64-linux-gnu`, `aarch64-linux-gnu`, `riscv64-linux-gnu`, `aarch64-macos-none` and `x86_64-windows-gnu`.
+- The configuration generator accepts only 32- and 64-bit pointer widths; `avr`, `ez80`, `msp430`, `spork8` and `x86_16` targets are refused.
 - `wasm32-wasi` is refused because this mbed-TLS build omits `MBEDTLS_NET_C`, which libcurl's mbed-TLS backend needs. WASI also lacks dynamic linking and the runtime loader's `dlopen` support; those are separate limits.
 - Windows GNU builds omit SSPI authentication (Negotiate, Kerberos and NTLM-over-SSPI) and use the synchronous resolver; core NTLM remains available.
 - The single-dependency build has no HTTP/2, LDAP/LDAPS, gzip/brotli/zstd content decoding, Public Suffix List, IDN2, GSS-API, SSH or QUIC support. Without the PSL, cookie public-suffix rejection is unavailable.
