@@ -368,7 +368,6 @@ test "a loopback transfer delivers the recorded fixture, byte for byte" {
     try testing.expectEqual(@as(u64, fixture_body.len), declaredLength(sink.headBytes()) orelse
         return error.NoDeclaredLength);
     try testing.expect(fixture.fault == null);
-
 }
 
 test "the write callback receives the fixture's bytes and no response head" {
@@ -402,7 +401,6 @@ test "the write callback receives the fixture's bytes and no response head" {
 
     const head = try fixture.head(0);
     try testing.expect(hasLine(head, "GET /fixture.txt HTTP/1.1"));
-
 }
 
 test "a body byte that is not text reaches the callback intact" {
@@ -526,7 +524,6 @@ test "a getter's borrow reads back while the handle is unchanged and is the call
     try easy.perform();
     const again = (try easy.effectiveUrl()) orelse return error.NoEffectiveUrl;
     try testing.expectEqualStrings(first_url, again);
-
 }
 
 test "reset returns a handle to the state a fresh one is in" {
@@ -881,7 +878,6 @@ test "percent-encoding follows the unreserved set the specification defines" {
     const decoded = try curl.unescape(escaped);
     defer curl.freeEscaped(decoded);
     try testing.expectEqualSlices(u8, input, decoded);
-
 }
 
 test "percent-decoding leaves a triplet it cannot read exactly as it found it" {
@@ -910,5 +906,4 @@ test "percent-decoding leaves a triplet it cannot read exactly as it found it" {
             return error.MalformedTripletWasRewritten;
         }
     }
-
 }

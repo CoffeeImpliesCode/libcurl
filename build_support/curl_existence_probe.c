@@ -379,6 +379,7 @@ static const struct {
  * system header, and glibc's `<features.h>` hides `memrchr`, `accept4` and
  * `fmemopen` without it - measured on Zig 0.16.0's glibc, where all three are
  * absent from a plain `-std=gnu99` compile and present with the macro.
+ * (observed with Zig 0.16; not rechecked on 0.17).
  *
  * So the macro is defined here under the *same* condition, and the libc is
  * passed in from `build.zig`'s `generatorLibc` - the one function that already

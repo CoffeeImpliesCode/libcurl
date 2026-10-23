@@ -821,7 +821,7 @@ pub const Multi = struct {
     fn popInfo(self: *Multi) ?Message {
         var still_queued: c_int = 0;
         const raw = c.curl_multi_info_read(self.handle(), &still_queued) orelse return null;
-        const msg: *c.CURLMsg = @alignCast(@ptrCast(raw));
+        const msg: *c.CURLMsg = @ptrCast(@alignCast(raw));
         const kind: MessageKind = switch (msg.msg) {
             c.CURLMSG_DONE => .done,
             else => return null,

@@ -122,10 +122,11 @@ Makefile.cmake
 .zig-cache/
 zig-out/
 
-# Zig 0.16 fetches dependencies into a project-local directory. This package
-# declares exactly one dependency and it is a *relative path* to the sibling
-# mbed-TLS package, so nothing is fetched for it -- but a project-local fetch
-# directory must not be committable either, in case that ever changes.
+# Zig 0.16 fetches dependencies into a project-local directory (observed with
+# Zig 0.16; not rechecked on 0.17). This package declares exactly one
+# dependency and it is a *relative path* to the sibling mbed-TLS package, so
+# nothing is fetched for it -- but a project-local fetch directory must not be
+# committable either, in case that ever changes.
 zig-pkg/
 
 # The consumer package builds inside this repository and has its own cache and

@@ -298,9 +298,11 @@ const core_sources = [_][]const u8{
 
 /// Full upstream `CSOURCES` closure, in makefile order (`lib/Makefile.inc:439-441`).
 const curl_sources = blk: {
-    var all: [core_sources.len + vauth_sources.len + vdns_sources.len +
-        vtls_sources.len + vquic_sources.len + vssh_sources.len +
-        curlx_sources.len][]const u8 = undefined;
+    var all: [
+        core_sources.len + vauth_sources.len + vdns_sources.len +
+            vtls_sources.len + vquic_sources.len + vssh_sources.len +
+            curlx_sources.len
+    ][]const u8 = undefined;
     var n: usize = 0;
     for ([_][]const []const u8{
         core_sources[0..],
@@ -427,22 +429,73 @@ fn generatorLibc(target: std.Build.ResolvedTarget) []const u8 {
 /// The exhaustive switch rejects new tags; only 32- and 64-bit widths are supported.
 fn pointerWidthBits(target: std.Build.ResolvedTarget) []const u8 {
     return switch (target.result.cpu.arch) {
-        .aarch64, .aarch64_be, .alpha, .amdgcn, .bpfeb, .bpfel, .hppa64, .kvx,
-        .loongarch64, .mips64, .mips64el, .nvptx, .nvptx64, .powerpc64,
-        .powerpc64le, .riscv64, .riscv64be, .s390x, .sparc64, .spirv64, .ve,
-        .wasm64, .x86_64,
+        .aarch64,
+        .aarch64_be,
+        .alpha,
+        .amdgcn,
+        .bpfeb,
+        .bpfel,
+        .hppa64,
+        .kvx,
+        .loongarch64,
+        .mips64,
+        .mips64el,
+        .nvptx,
+        .nvptx64,
+        .powerpc64,
+        .powerpc64le,
+        .riscv64,
+        .riscv64be,
+        .s390x,
+        .sparc64,
+        .spirv64,
+        .ve,
+        .wasm64,
+        .x86_64,
         => "64",
 
         // Endianness does not change pointer width.
-        .arc, .arceb, .arm, .armeb, .csky, .hexagon, .hppa, .kalimba, .lanai,
-        .loongarch32, .m68k, .m88k, .microblaze, .microblazeel, .mips, .mipsel,
-        .or1k, .powerpc, .powerpcle, .propeller, .riscv32, .riscv32be, .sh,
-        .sheb, .sparc, .spirv32, .thumb, .thumbeb, .wasm32, .x86, .xcore,
-        .xtensa, .xtensaeb,
+        .arc,
+        .arceb,
+        .arm,
+        .armeb,
+        .csky,
+        .hexagon,
+        .hppa,
+        .kalimba,
+        .lanai,
+        .loongarch32,
+        .m68k,
+        .m88k,
+        .microblaze,
+        .microblazeel,
+        .mips,
+        .mipsel,
+        .or1k,
+        .powerpc,
+        .powerpcle,
+        .propeller,
+        .riscv32,
+        .riscv32be,
+        .sh,
+        .sheb,
+        .sparc,
+        .spirv32,
+        .thumb,
+        .thumbeb,
+        .wasm32,
+        .x86,
+        .xcore,
+        .xtensa,
+        .xtensaeb,
         => "32",
 
         // Refuse architectures whose pointer width the generator cannot express.
-        .avr, .ez80, .msp430, .spork8, .x86_16,
+        .avr,
+        .ez80,
+        .msp430,
+        .spork8,
+        .x86_16,
         => std.debug.panic("libcurl: no --pointer-width for architecture {s}. " ++
             "curl_config_gen.c derives SIZEOF_SIZE_T, SIZEOF_LONG, SIZEOF_OFF_T, " ++
             "SIZEOF_CURL_SOCKET_T and SIZEOF_TIME_T from --pointer-width, which " ++
@@ -668,7 +721,6 @@ fn resolveTls(
 
 /// Reuse the dependency resolved by `addGraph` for headers and TLS archives.
 /// `config_dir` is the generated header's directory, not an unresolved file path.
-
 /// Compile upstream's 196 `CSOURCES` units for one target.
 /// Linkage selects the artifact, not a different source closure.
 fn add_c_library(

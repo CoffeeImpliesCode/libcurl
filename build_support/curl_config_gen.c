@@ -733,6 +733,7 @@ static const struct entry entries[] = {
      * `USE_ARES` would need c-ares, which is not a dependency of this package,
      * and `TARGET_OS_IPHONE` is the target's own platform macro, so defining it
      * to steer this test would be telling the sources a lie about the platform.
+     * (observed with Zig 0.16; not rechecked on 0.17).
      *
      * This is upstream's own answer rather than an invention: `lib/config-mac.h`
      * - the hand-written macOS configuration this package also does not use -

@@ -19,8 +19,9 @@
     // Changing `.name`, `.version` or this manifest's dependency keys changes
     // the number, so a stale one is a refusal by name rather than a silent
     // identity reuse.
+    // (observed with Zig 0.16; not rechecked on 0.17).
     .fingerprint = 0xf1f025436af345ac,
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
     .dependencies = .{
         // A relative path, not a registry or archive URL. The consumer is the
         // proof that `dep.module("libcurl")` works from outside the package that
