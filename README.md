@@ -11,7 +11,7 @@ A Zig package for curl's client-side transfer library, built from upstream libcu
 
 - The Zig build compiles the upstream C source list with `-std=gnu99`; it does not use CMake, autotools, or Make, and has no system-libcurl mode.
 - The build generates `curl_config.h` from target facts with `build_support/curl_config_gen.c`; it does not run configure.
-- mbed-TLS is the only TLS backend and is the `mbed-tls` package dependency declared in `build.zig.zon`, not vendored here. Other optional dependencies are absent: no HTTP/2, LDAP, zlib/brotli/zstd content encoding beyond identity, public-suffix list, IDN2, or GSS-API. Requests for unavailable features may return libcurl's not-built-in errors; cookie-domain checks are coarser without the public-suffix list.
+- `mbed-TLS` is the only TLS backend. Zig fetches it automatically from the GitHub URL pinned in `build.zig.zon`. It is not vendored here. Other optional dependencies are absent: no HTTP/2, LDAP, zlib/brotli/zstd content encoding beyond identity, public-suffix list, IDN2, or GSS-API. Requests for unavailable features may return libcurl's not-built-in errors; cookie-domain checks are coarser without the public-suffix list.
 - C consumers receive the 12 public headers under `include/curl/` and `libcurl.pc`.
 
 ## Support matrix
@@ -26,13 +26,13 @@ A Zig package for curl's client-side transfer library, built from upstream libcu
 
 Add the package to the consumer's `build.zig.zon`:
 
-```zig
-.dependencies = .{
-    .libcurl = .{ .path = "../libcurl" },
-},
+```sh
+zig fetch --save git+https://github.com/CoffeeImpliesCode/libcurl#v8.22.0
 ```
 
-Mbed-TLS resolves through libcurl's manifest dependency; consumers need no sibling mbed-TLS checkout when that dependency uses a URL.
+Zig fetches mbed-TLS from the URL pinned in libcurl's manifest. Nix builds fetch that revision and populate Zig's global cache before compilation; no sibling checkout is required. Override `mbedTlsSrc` in `package.nix` to supply another source.
+
+Nix flake outputs are `static`, `shared`, and `default`. `default` selects `static`; `shared` selects `-Dlinkage=dynamic`.
 
 Add the named Zig module `libcurl`; it links the `libcurl` artifact through the module (no separate link call):
 
