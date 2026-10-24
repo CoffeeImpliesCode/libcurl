@@ -53,18 +53,6 @@ let
     cd "${sdk_root}" || exit 1
   '';
 
-  # Require ../mbed-tls from the manifest; no system backend or TLS-disabled fallback is used.
-  require_sibling_mbedtls = ''
-    if [ ! -f "../mbed-tls/build.zig.zon" ]; then
-      echo "libcurl devenv: ../mbed-tls/build.zig.zon is not present." >&2
-      echo "build.zig.zon declares its only dependency as a relative path to the" >&2
-      echo "mbed-TLS package, and this package has no vendored copy and no option" >&2
-      echo "that turns TLS off, so it cannot configure without that sibling." >&2
-      echo "Nothing here can supply it: the driver owns the sibling package." >&2
-      exit 1
-    fi
-  '';
-
   native_flags = ''
     -j8 --summary all --cache-dir "$ZIG_LOCAL_CACHE_DIR/native" "''$@"
   '';
@@ -111,7 +99,6 @@ in
       '';
       exec = ''
         ${in_sdk}
-        ${require_sibling_mbedtls}
         zig build --prefix "$ZIG_LOCAL_CACHE_DIR/prefix/static" ${native_flags}
       '';
     };
@@ -123,7 +110,6 @@ in
       '';
       exec = ''
         ${in_sdk}
-        ${require_sibling_mbedtls}
         zig build -Dlinkage=dynamic --prefix "$ZIG_LOCAL_CACHE_DIR/prefix/dynamic" ${native_flags}
       '';
     };
@@ -132,7 +118,6 @@ in
       description = "Run the behavioural tests in Debug";
       exec = ''
         ${in_sdk}
-        ${require_sibling_mbedtls}
         zig build test ${native_flags}
       '';
     };
@@ -141,7 +126,6 @@ in
       description = "Run the behavioural tests in ReleaseSafe";
       exec = ''
         ${in_sdk}
-        ${require_sibling_mbedtls}
         zig build test -Doptimize=ReleaseSafe ${native_flags}
       '';
     };
@@ -150,7 +134,6 @@ in
       description = "Run the deterministic example";
       exec = ''
         ${in_sdk}
-        ${require_sibling_mbedtls}
         zig build smoke ${native_flags}
       '';
     };
@@ -162,7 +145,6 @@ in
       '';
       exec = ''
         ${in_sdk}
-        ${require_sibling_mbedtls}
         zig build check ${native_flags}
       '';
     };
@@ -171,7 +153,6 @@ in
       description = "Build and run the separate consumer package against this SDK";
       exec = ''
         ${in_sdk}
-        ${require_sibling_mbedtls}
         cd consumer
         zig build run ${consumer_flags}
       '';

@@ -7,6 +7,13 @@
 , stdenv
 , zig
 , patchelf
+, fetchFromGitHub
+, mbedTlsSrc ? fetchFromGitHub {
+    owner = "CoffeeImpliesCode";
+    repo = "mbed-tls";
+    rev = "c9463b540139f5440f1dc20976532ccd5b7cb765";
+    hash = "sha256-tEjYqhFannLpZlFRMv7np3ngvFQeEoimEpVoRDW4VeY=";
+  }
   # Select the static or dynamic artifact produced by `build.zig`.
 , linkage ? "static"
 , optimize ? "ReleaseSafe"
@@ -17,18 +24,10 @@ let
     if builtins.elem linkage [ "" "static" "dynamic" ] then linkage
     else throw "package.nix: linkage must be \"\", \"static\" or \"dynamic\", not ${toString linkage}";
 
-# Include the required ../mbed-tls sibling so Zig can resolve the manifest dependency.
-
   # Exclude build outputs, version control, and developer-tool state from the source.
   src = lib.cleanSourceWith {
     name = "libcurl-source";
-    src = lib.fileset.toSource {
-      root = ../.;
-      fileset = lib.fileset.unions [
-        (lib.fileset.directory ./.)
-        (lib.fileset.directory ../mbed-tls)
-      ];
-    };
+    src = ./.;
     filter = path: _type:
       let name = builtins.baseNameOf (toString path); in
       !(lib.elem name [
@@ -77,6 +76,8 @@ stdenv.mkDerivation {
     # Keep Zig caches under TMPDIR and outside the unpacked source tree.
     export ZIG_LOCAL_CACHE_DIR="$TMPDIR/zig-local-cache"
     export ZIG_GLOBAL_CACHE_DIR="$TMPDIR/zig-global-cache"
+    mkdir -p "$ZIG_GLOBAL_CACHE_DIR/p"
+    cp -r --no-preserve=mode ${mbedTlsSrc} "$ZIG_GLOBAL_CACHE_DIR/p/mbed_tls-3.6.7-SuSKykiIhQBFmMDGAXrRs_TsxGbaITJHF8VDaj5Qx1LI"
 
     zig build install \
       --prefix "$out" \

@@ -31,7 +31,7 @@
         {
           static = mk "static";
 
-          dynamic = mk "dynamic";
+          shared = mk "dynamic";
 
           default = mk "static";
         });
