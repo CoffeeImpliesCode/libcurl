@@ -10,8 +10,8 @@
     // The required TLS backend; this package has no TLS-disabled build.
     .dependencies = .{
         .@"mbed-tls" = .{
-            .url = "git+https://github.com/CoffeeImpliesCode/mbed-tls?ref=v3.6.7#c9463b540139f5440f1dc20976532ccd5b7cb765",
-            .hash = "mbed_tls-3.6.7-SuSKykiIhQBFmMDGAXrRs_TsxGbaITJHF8VDaj5Qx1LI",
+            .url = "git+https://github.com/CoffeeImpliesCode/mbed-tls?ref=v3.6.7#698b3da6b32e0d152ebd36a82f12c603cb379e2e",
+            .hash = "mbed_tls-3.6.7-SuSKytSHhQCa7xCoUnKRw_q0m284uVj7gnbsq_KkrYsS",
         },
     },
     .paths = .{

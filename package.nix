@@ -11,8 +11,8 @@
 , mbedTlsSrc ? fetchFromGitHub {
     owner = "CoffeeImpliesCode";
     repo = "mbed-tls";
-    rev = "c9463b540139f5440f1dc20976532ccd5b7cb765";
-    hash = "sha256-tEjYqhFannLpZlFRMv7np3ngvFQeEoimEpVoRDW4VeY=";
+    rev = "698b3da6b32e0d152ebd36a82f12c603cb379e2e";
+    hash = "sha256-LPSQc3IK74qFKuRGYzxRgtDQXqorWpdATtqz6wRscpg=";
   }
   # Select the static or dynamic artifact produced by `build.zig`.
 , linkage ? "static"
@@ -77,7 +77,7 @@ stdenv.mkDerivation {
     export ZIG_LOCAL_CACHE_DIR="$TMPDIR/zig-local-cache"
     export ZIG_GLOBAL_CACHE_DIR="$TMPDIR/zig-global-cache"
     mkdir -p "$ZIG_GLOBAL_CACHE_DIR/p"
-    cp -r --no-preserve=mode ${mbedTlsSrc} "$ZIG_GLOBAL_CACHE_DIR/p/mbed_tls-3.6.7-SuSKykiIhQBFmMDGAXrRs_TsxGbaITJHF8VDaj5Qx1LI"
+    cp -r --no-preserve=mode ${mbedTlsSrc} "$ZIG_GLOBAL_CACHE_DIR/p/mbed_tls-3.6.7-SuSKytSHhQCa7xCoUnKRw_q0m284uVj7gnbsq_KkrYsS"
 
     zig build install \
       --prefix "$out" \
