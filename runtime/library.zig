@@ -81,16 +81,16 @@ pub fn Config(comptime dispatch: type) type {
                 "of one static struct, so null is not a shape this library " ++
                 "produces";
 
-            if (info.age < dispatch.CURLVERSION_NOW) return "curl_version_info reports an older curl_version_info_data than " ++
+            if (info[0].age < dispatch.CURLVERSION_NOW) return "curl_version_info reports an older curl_version_info_data than " ++
                 "the CURLVERSION_NOW include/curl/curl.h:3136 defines, so this " ++
                 "provider's version struct is not the one these headers describe";
 
             // Reject providers without a TLS backend.
-            if (info.ssl_version == null) return "this provider reports a null ssl_version, so it was built " ++
+            if (info[0].ssl_version == null) return "this provider reports a null ssl_version, so it was built " ++
                 "without a TLS backend. This package has no configuration " ++
                 "without one and will not load a provider that has none";
 
-            if ((info.features & dispatch.CURL_VERSION_SSL) == 0) return "this provider does not set CURL_VERSION_SSL, so it was built " ++
+            if ((info[0].features & dispatch.CURL_VERSION_SSL) == 0) return "this provider does not set CURL_VERSION_SSL, so it was built " ++
                 "without a TLS backend. This package has no configuration " ++
                 "without one and will not load a provider that has none";
 

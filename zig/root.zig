@@ -99,11 +99,11 @@ pub const VersionInfo = struct {
 pub fn versionInfo() VersionInfo {
     const info = c.curl_version_info(c.CURLVERSION_NOW);
     return .{
-        .version = std.mem.span(info.version),
-        .version_num = info.version_num,
-        .host = std.mem.span(info.host),
-        .ssl_version = if (info.ssl_version) |v| std.mem.span(v) else null,
-        .features = info.features,
+        .version = std.mem.span(info[0].version),
+        .version_num = info[0].version_num,
+        .host = std.mem.span(info[0].host),
+        .ssl_version = if (info[0].ssl_version) |v| std.mem.span(v) else null,
+        .features = info[0].features,
     };
 }
 

@@ -1814,8 +1814,8 @@ const libc_noise =
     \\delay, delay_fini, delay_init, deprecated, device_lookup, device_mainbus, device_mpath,
     \\device_ref, device_register, device_register_wakeup, device_unref, difftime, disconnectx,
     \\div, dkcsumattach, do_sched_getparam, do_sched_setparam, dofilereadv, dofilewritev,
-    \\dogetrusage, donice, dosetrlimit, dosoftint, dprintf, dprintf_l, dumpconf, early_idt,
-    \\ecpu_ecxfeature, ecvt, enc, endhostent, endnetent, endnetgrent, endprotoent,
+    \\dogetrusage, donice, dosetrlimit, dosoftint, dprintf, dprintf_l, dumpconf, dysize,
+    \\early_idt, ecpu_ecxfeature, ecvt, enc, endhostent, endnetent, endnetgrent, endprotoent,
     \\endprotoent_r, endrpcent, endservent, endservent_r, ent, err, est_init, est_setperf,
     \\evcnt_attach_dynamic, evcnt_attach_dynamic_nozero, evcnt_attach_legacy_intrcnt,
     \\evcnt_attach_static, evcnt_detach, evcnt_init, evcount_attach, evcount_detach,
@@ -2153,17 +2153,18 @@ fn generateDispatch(
     run.addArg("libcurl");
     run.addArg("--translate");
     run.addFileArg(translate.getOutput());
+    const names = b.addWriteFiles();
     if (libc_noise.len != 0) {
-        run.addArg("--noise");
-        run.addArg(libc_noise);
+        run.addArg("--noise-file");
+        run.addFileArg2(names.add("noise.txt", libc_noise), .{});
     }
     if (provider_optional.len != 0) {
-        run.addArg("--optional");
-        run.addArg(provider_optional);
+        run.addArg("--optional-file");
+        run.addFileArg2(names.add("optional.txt", provider_optional), .{});
     }
     if (provider_excluded.len != 0) {
-        run.addArg("--exclude");
-        run.addArg(provider_excluded);
+        run.addArg("--exclude-file");
+        run.addFileArg2(names.add("exclude.txt", provider_excluded), .{});
     }
     run.addArg("--native-output");
     const native_source = run.addOutputFileArg("native.zig");

@@ -21,6 +21,7 @@ Close every easy and multi handle before the matching `globalCleanup`. `Easy.ini
 - `runtime_loaded` is a compile-time boolean. `load`, `loadedSource`, and `unload` apply to runtime-loading builds; linked builds return null from `loadedSource` and panic on `load` or `unload`.
 - `LoadSource.path` takes an absolute file path. `LoadSource.system` takes a bare library name or SONAME. Failed loads publish no provider and can be retried; a different provider request returns `ProviderMismatch`.
 - `LoadError`: `EmptySource`, `SourceTooLong`, `InvalidSource`, `UnsupportedTarget`, `OpenFailed`, `MissingSymbol`, `ProviderMismatch`, `ReentrantLoad`. `unload` releases the dispatch table; do not call it while libcurl calls may be active.
+- Runtime `c` variadic wrappers take their fixed parameters followed by one scalar argument or a tuple of arguments. Use `.{}` for no extra arguments; use C-promoted argument types such as `c_int` and `c_long`.
 
 ## Global state and version
 

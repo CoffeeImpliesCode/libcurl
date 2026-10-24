@@ -5,6 +5,10 @@ const std = @import("std");
 const curl = @import("libcurl");
 const testing = std.testing;
 
+test {
+    _ = @import("runtime/generate.zig");
+}
+
 const Sha256 = std.crypto.hash.sha2.Sha256;
 
 const provider_variable = "LIBCURL_TEST_PROVIDER";
@@ -339,6 +343,69 @@ fn libraryReady() !void {
         return error.GlobalInitFailed;
     };
     global_ready.store(true, .release);
+}
+
+test "version information reads the provider's C record" {
+    try libraryReady();
+    const info = curl.versionInfo();
+    try testing.expect(info.version.len != 0);
+    try testing.expect(info.version_num != 0);
+    try testing.expect(info.host.len != 0);
+    try testing.expect(info.ssl_version != null);
+    try testing.expect((info.features & curl.c.CURL_VERSION_SSL) != 0);
+}
+
+test "variadic options preserve scalar integer and pointer arguments" {
+    try libraryReady();
+    var easy = try curl.Easy.init();
+    defer easy.deinit();
+    try easy.setTimeoutMs(1234);
+    try testing.expectError(error.BadFunctionArgument, easy.setTimeoutMs(-1));
+
+    var context: u8 = 42;
+    const pointer: ?*anyopaque = &context;
+    const set_result = if (comptime curl.runtime_loaded)
+        curl.c.curl_easy_setopt(easy.handle(), curl.c.CURLOPT_PRIVATE, pointer)
+    else
+        @call(.auto, curl.c.curl_easy_setopt, .{ easy.handle(), curl.c.CURLOPT_PRIVATE, pointer });
+    try testing.expectEqual(@as(@TypeOf(set_result), @intCast(curl.c.CURLE_OK)), set_result);
+
+    var returned: ?*anyopaque = null;
+    const get_result = if (comptime curl.runtime_loaded)
+        curl.c.curl_easy_getinfo(easy.handle(), curl.c.CURLINFO_PRIVATE, &returned)
+    else
+        @call(.auto, curl.c.curl_easy_getinfo, .{ easy.handle(), curl.c.CURLINFO_PRIVATE, &returned });
+    try testing.expectEqual(@as(@TypeOf(get_result), @intCast(curl.c.CURLE_OK)), get_result);
+    try testing.expectEqual(pointer, returned);
+}
+
+test "runtime provider contract contains only libcurl exports" {
+    if (comptime !curl.runtime_loaded) return;
+    try testing.expect(curl.c.symbols.len != 0);
+    var unexpected = false;
+    inline for (.{ curl.c.symbols, curl.c.optional_symbols }) |symbols| {
+        for (symbols) |symbol| {
+            if (!std.mem.startsWith(u8, symbol.name, "curl_")) {
+                std.debug.print("tests.zig: unexpected runtime provider export: {s}\n", .{symbol.name});
+                unexpected = true;
+            }
+        }
+    }
+    try testing.expect(!unexpected);
+}
+
+test "runtime variadic dispatch preserves multiple and empty argument tuples" {
+    if (comptime !curl.runtime_loaded) return;
+    try libraryReady();
+    var buffer: [64]u8 = undefined;
+    const text: [*:0]const u8 = "value";
+    const count = curl.c.curl_msnprintf(&buffer, buffer.len, "%s:%d", .{ text, @as(c_int, 42) });
+    try testing.expectEqual(@as(c_int, 8), count);
+    try testing.expectEqualStrings("value:42", std.mem.span(@as([*:0]const u8, @ptrCast(&buffer))));
+
+    const empty_count = curl.c.curl_msnprintf(&buffer, buffer.len, "literal", .{});
+    try testing.expectEqual(@as(c_int, 7), empty_count);
+    try testing.expectEqualStrings("literal", std.mem.span(@as([*:0]const u8, @ptrCast(&buffer))));
 }
 
 test "a loopback transfer delivers the recorded fixture, byte for byte" {

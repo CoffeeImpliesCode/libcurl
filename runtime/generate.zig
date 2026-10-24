@@ -17,6 +17,7 @@ const max_translated_bytes = 64 * 1024 * 1024;
 const Failure = error{
     TranslateUnreadable,
     TranslateDoesNotParse,
+    NamesUnreadable,
     MissingLibrary,
     MissingTranslate,
     MissingOutput,
@@ -32,7 +33,7 @@ pub fn main(init: std.process.Init) !void {
 
     const args = try init.minimal.args.toSlice(arena);
 
-    const options = Options.parse(arena, args) catch |err| {
+    const options = Options.parse(init.io, arena, args) catch |err| {
         usage();
         return err;
     };
@@ -53,8 +54,8 @@ pub fn main(init: std.process.Init) !void {
 fn usage() void {
     std.debug.print(
         \\usage: generate --library <name> --translate <translated.zig> --output <dispatch.zig>
-        \\                  [--native-output <patched.zig>] [--noise a,b]
-        \\                  [--optional a,b] [--exclude a,b]
+        \\                  [--native-output <patched.zig>] [--noise-file <names.txt>]
+        \\                  [--optional-file <names.txt>] [--exclude-file <names.txt>]
         \\
     , .{});
 }
@@ -70,7 +71,7 @@ const Options = struct {
     optional: std.StringHashMapUnmanaged(void) = .empty,
     exclude: std.StringHashMapUnmanaged(void) = .empty,
 
-    fn parse(arena: std.mem.Allocator, args: []const [:0]const u8) Failure!Options {
+    fn parse(io: Io, arena: std.mem.Allocator, args: []const [:0]const u8) Failure!Options {
         var self: Options = .{};
         var index: usize = 1;
         while (index < args.len) : (index += 1) {
@@ -83,12 +84,12 @@ const Options = struct {
                 self.output = take(args, &index);
             } else if (std.mem.eql(u8, flag, "--native-output")) {
                 self.native_output = take(args, &index);
-            } else if (std.mem.eql(u8, flag, "--noise")) {
-                try addNames(arena, &self.noise, take(args, &index));
-            } else if (std.mem.eql(u8, flag, "--optional")) {
-                try addNames(arena, &self.optional, take(args, &index));
-            } else if (std.mem.eql(u8, flag, "--exclude")) {
-                try addNames(arena, &self.exclude, take(args, &index));
+            } else if (std.mem.eql(u8, flag, "--noise-file")) {
+                try addNamesFile(io, arena, &self.noise, take(args, &index));
+            } else if (std.mem.eql(u8, flag, "--optional-file")) {
+                try addNamesFile(io, arena, &self.optional, take(args, &index));
+            } else if (std.mem.eql(u8, flag, "--exclude-file")) {
+                try addNamesFile(io, arena, &self.exclude, take(args, &index));
             } else {
                 std.debug.print("runtime/generate.zig: unknown argument '{s}'\n", .{flag});
                 return error.UnknownArgument;
@@ -115,6 +116,27 @@ fn take(args: []const [:0]const u8, index: *usize) []const u8 {
     if (index.* + 1 >= args.len) return "";
     index.* += 1;
     return args[index.*];
+}
+
+fn addNamesFile(
+    io: Io,
+    arena: std.mem.Allocator,
+    set: *std.StringHashMapUnmanaged(void),
+    path: []const u8,
+) Failure!void {
+    const names = Io.Dir.cwd().readFileAlloc(
+        io,
+        path,
+        arena,
+        .limited(max_translated_bytes),
+    ) catch |err| {
+        std.debug.print(
+            "runtime/generate.zig: cannot read the name list '{s}': {t}\n",
+            .{ path, err },
+        );
+        return error.NamesUnreadable;
+    };
+    try addNames(arena, set, names);
 }
 
 fn addNames(
@@ -195,7 +217,7 @@ fn generate(
     options: Options,
 ) Failure!struct { dispatch: []const u8, native: []const u8 } {
     const source_z = try readSentinel(io, arena, options.translate);
-    var tree = try Ast.parse(arena, source_z, .zig);
+    var tree = try Ast.parse(arena, source_z, .{ .mode = .zig });
     defer tree.deinit(arena);
 
     if (tree.errors.len != 0) {
@@ -471,7 +493,7 @@ fn planSignature(
         );
         return error.UnsupportedDeclaration;
     }
-    // C variadic calls receive the wrapper's extra arguments as one tuple.
+    // Accept a scalar variadic argument or a tuple, including an empty tuple.
     const tail = if (variadic)
         try std.fmt.allocPrint(arena, " {s}", .{return_text})
     else
@@ -845,9 +867,14 @@ fn writeFunction(w: *Writer, decl: Decl) !void {
         try w.print("    const target = table.{s};\n", .{decl.name});
     }
     if (decl.variadic) {
+        try w.writeAll(
+            \\    const rt_varargs = if (comptime @typeInfo(@TypeOf(rt_args)) == .@"struct" and
+            \\        @typeInfo(@TypeOf(rt_args)).@"struct".is_tuple) rt_args else .{rt_args};
+            \\
+        );
         try w.writeAll("    return @call(.auto, target, .{");
         try writeArgumentList(w, decl.arguments);
-        try w.writeAll("} ++ rt_args);\n");
+        try w.writeAll("} ++ rt_varargs);\n");
     } else {
         try w.writeAll("    return target(");
         try writeArgumentList(w, decl.arguments);
@@ -1303,4 +1330,53 @@ fn declarationName(
         if (tree.tokenTag(index) == .identifier) return tree.tokenSlice(index);
     }
     return null;
+}
+
+test "name files carry lists larger than a process argument" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const names = try arena.alloc(u8, 160 * 1024);
+    @memset(names, ' ');
+    @memcpy(names[0.."malloc,".len], "malloc,");
+    @memcpy(names[names.len - "free,".len ..], "free,");
+    try tmp.dir.writeFile(std.testing.io, .{
+        .sub_path = "names.txt",
+        .data = names,
+    });
+    const path = try tmp.dir.realPathFileAlloc(std.testing.io, "names.txt", arena);
+    const options = try Options.parse(std.testing.io, arena, &.{
+        "generate",
+        "--library",
+        "libcurl",
+        "--translate",
+        "translated.zig",
+        "--output",
+        "dispatch.zig",
+        "--noise-file",
+        path,
+    });
+    try std.testing.expectEqual(Options.Route.direct, options.routeOf("malloc"));
+    try std.testing.expectEqual(Options.Route.direct, options.routeOf("free"));
+    try std.testing.expectEqual(Options.Route.routed, options.routeOf("curl_easy_init"));
+
+    const optional = try Options.parse(std.testing.io, arena, &.{
+        "generate",
+        "--library",
+        "libcurl",
+        "--translate",
+        "translated.zig",
+        "--output",
+        "dispatch.zig",
+        "--optional-file",
+        path,
+        "--exclude-file",
+        path,
+    });
+    try std.testing.expect(optional.optional.contains("malloc"));
+    try std.testing.expect(optional.exclude.contains("free"));
+    try std.testing.expectEqual(Options.Route.optional, optional.routeOf("malloc"));
 }

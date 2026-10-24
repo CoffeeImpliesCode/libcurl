@@ -17,10 +17,8 @@
  *                itself: "unfortunately, the easy.h and multi.h include files
  *                need options and info stuff before they can be included".
  *
- * One `#include` is therefore the whole of curl's declaration surface, and
- * this wrapper cannot disagree with the real headers by omission because it
- * defers the whole list to the one include upstream already tells every
- * consumer to write. They are all included whole, with their own guards.
+ * The umbrella header supplies curl's public declarations. The translation
+ * disables GNU C typechecking macros, as described below.
  *
  * What reaches the translation through that include
  * -------------------------------------------------
@@ -50,12 +48,8 @@
  *                                                curl_ws_frame
  *      mprintf.h      include/curl/curl.h:3347 curl_mprintf and the
  *                                                curlx_ family of allocators
- *      typecheck-gcc.h include/curl/curl.h:3354 the compile-time argument
- *                                                checker for the four varargs
- *                                                setopt/getinfo entry points;
- *                                                included only under the
- *                                                gcc/clang test at
- *                                                :3350-3353
+ *      typecheck-gcc.h is excluded with CURL_DISABLE_TYPECHECK; its helpers
+ *                      have no exported ABI.
  *
  * 2. The C library's headers, reached the same way, which is why the runtime
  *    dispatch has to know about them:
@@ -112,21 +106,10 @@
  * build.zig's answer for the linkage it selected, and the same include gives
  * an installed C consumer its own answer through its own compile line.
  *
- * `CURL_DISABLE_TYPECHECK` is the one macro on that list that changes what
- * this header parses rather than what the declarations mean. Leaving it
- * undefined under gcc or clang takes `typecheck-gcc.h` into the closure
- * (`include/curl/curl.h:3350-3354`), and that file redefines
- * `curl_easy_setopt`, `curl_easy_getinfo`, `curl_share_setopt` and
- * `curl_multi_setopt` as macros over a GNU statement expression that checks
- * each option/value pair at compile time
- * (`include/curl/typecheck-gcc.h:44-46`). The underlying declarations still
- * come from easy.h, multi.h and curl.h, and the name a caller writes is the
- * same either way; whether the translator lowers that statement expression
- * into a callable wrapper or leaves the four names as its own `extern`
- * declarations is the translator's business, and no `zig translate-c` of this
- * header has been run in this workspace, so this file does not record which
- * shape it produced. See runtime/graph.zig, whose comment on what is routed
- * and what is a macro expansion is the matching account.
+ * build.zig sets `CURL_DISABLE_TYPECHECK` for translation. The GNU C option
+ * checker defines static helpers with inline assembly; translate-c demotes
+ * those bodies to extern declarations that no libcurl provider exports.
+ * The four underlying variadic API declarations remain available.
  */
 
 #ifndef LIBCURL_TRANSLATE_H

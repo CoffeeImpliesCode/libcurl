@@ -32,7 +32,7 @@ const lib_name = "libcurl";
 const tls_dependency_name = "mbed-tls";
 const tls_artifacts = [_][]const u8{ "mbedtls", "mbedx509", "mbedcrypto" };
 
-/// mbed-TLS headers are under the sibling package's `src/include`.
+/// mbed-TLS headers are under the package dependency's `src/include`.
 const tls_public_include = "src/include";
 
 /// DES support enables libcurl's NTLM core in the mbed-TLS configuration.
@@ -664,6 +664,9 @@ fn addGraph(
     // Match `USE_MBEDTLS` and `BUILDING_LIBCURL` to C compilation; translation must describe the library.
     translate.defineCMacro("USE_MBEDTLS", "1");
     translate.defineCMacro("BUILDING_LIBCURL", "1");
+    // GNU typecheck helpers contain inline assembly; translate-c demotes them to externs.
+    // They have internal linkage and are never provider exports.
+    translate.defineCMacro("CURL_DISABLE_TYPECHECK", "1");
     // Set `CURL_STATICLIB` only for archives; curl.h uses it to control DLL exports (`include/curl/curl.h:124`).
     if (deliveredLinkage(target, linkage) == .static) {
         translate.defineCMacro("CURL_STATICLIB", "1");
@@ -782,7 +785,7 @@ fn add_c_library(
         c_mod.linkSystemLibrary("bcrypt", .{});
     }
 
-    // Resolve mbed-TLS headers from the sibling source root at `src/include`.
+    // Resolve mbed-TLS headers from the package dependency at `src/include`.
     // Compile against its shipped config; its generated cache path is not a dependency here.
     c_mod.addIncludePath(tls.path(tls_public_include));
     // Static link order: `mbedtls`, `mbedx509`, then `mbedcrypto`.
